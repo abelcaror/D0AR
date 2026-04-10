@@ -1,0 +1,366 @@
+
+# Librerías ---------------------------------------------------------------
+
+library(openxlsx2)
+# library(xlsx)
+# library(writexl)
+# library(readxl)
+
+
+# Estructura general ------------------------------------------------------
+
+datos_ventas <- data.frame(
+  producto = c("Manzanas", "Plátanos", "Naranjas"),
+  cantidad = c(120, 85, 200),
+  precio = c(1.5, 0.90, 1.20)
+)
+
+wb <- wb_workbook()
+wb$add_worksheet("ventas")
+wb$add_data("ventas", datos_ventas)
+
+wb$save("clase01.xlsx")
+
+wb_leido <- wb_load("clase01.xlsx")
+
+df_wb_leido <- wb_to_df(wb_leido, "ventas")
+# read_xlsx("clase01.xlsx", "ventas")
+
+
+# Manipulación de hojas ---------------------------------------------------
+
+wb <- wb_workbook()
+
+wb$add_worksheet("enero")
+wb$add_worksheet("febrero")
+wb$add_worksheet("marzo")
+wb$add_worksheet("test")
+
+for(mes in c("enero", "febrero", "marzo")) {
+  datos <- data.frame(
+    dia = 1:15,
+    ingreso = round(runif(15, 1000, 2500), 2)
+  )
+  wb$add_data(mes, datos)
+}
+
+nombres <- wb$get_sheet_names()
+wb$set_sheet_names(old = "test", new = "resumen")
+wb$remove_worksheet("resumen")
+
+wb$save("clase02.xlsx")
+
+
+# Escritura en celdas -----------------------------------------------------
+
+wb <- wb_load("clase02.xlsx")
+ventas <- read_xlsx("clase01.xlsx", "ventas")
+
+wb$add_worksheet("ventas")
+wb$add_data("ventas", ventas)
+
+wb$add_worksheet("resumen")
+wb$add_data("resumen", "Resumen trimestral", start_row = 1, start_col = 1)
+
+enero <- wb_to_df(wb, "enero")
+febrero <- wb_to_df(wb, "febrero")
+marzo <- wb_to_df(wb, "marzo")
+
+resumen <- data.frame(
+  mes = c("enero", "febrero", "marzo"),
+  total_ingresos <- c(sum(enero$ingreso), sum(febrero$ingreso), sum(marzo$ingreso))
+)
+
+wb$add_data("resumen", resumen, start_row = 3, , start_col = 1, col_names = FALSE)
+wb$add_data("resumen", "Citras estimadas en euros", start_row = 8, start_col = 1)
+
+wb$add_data("resumen", "Generado el: ", start_row = 10, , start_col = 1)
+wb$add_data("resumen", Sys.Date(), start_row = 10, , start_col = 2)
+
+wb$add_data("ventas", "importe", start_row = 1, start_col = 4)
+wb$add_data("ventas", data.frame(ventas$cantidad * ventas$precio),
+            start_row = 2, start_col = 4, col_names = FALSE)
+
+wb$save("clase03.xlsx")
+
+
+# Formato de celdas -------------------------------------------------------
+
+wb <- wb_load("clase03.xlsx")
+
+wb$add_font("ventas", dims = "A1:D1", bold = 1, size = 14, color = wb_color("FFFFFF"))
+wb$add_fill("ventas", dims = "A1:D1", color = wb_color("4472C4"))
+
+wb$add_font("ventas", dims = "A2:A4", italic = 1)
+wb$add_font("ventas", dims = "C2:C4", name = "Courier New", size = 12)
+
+wb$add_font("resumen", dims = "A1", bold = 1, size = 18)
+wb$add_fill("resumen", dims = "A1", color = wb_color("1F4E79"))
+
+wb$add_font("resumen", dims = "A3:B3", bold = 1, size = 12)
+wb$add_fill("resumen", dims = "A3:B3", color = wb_color("D6E4F0"))
+
+for(hoja in c("enero", "febrero", "marzo")) {
+  wb$add_font(hoja, dims = "A1:B1", bold = 1)
+  wb$add_fill(hoja, dims = "A1:B1", color = wb_color("E2EFDA"))
+}
+
+
+wb$save("clase04.xlsx")
+
+
+# Formatos avanzados de celdas --------------------------------------------
+
+
+wb <- wb_load("clase04.xlsx")
+
+wb$add_border(
+  "ventas", "A1:D4", 
+  top_border = "thin", top_color = wb_color("000000"),
+  left_border = "thin", left_color = wb_color("000000"),
+  right_border = "thin", right_color = wb_color("000000"),
+  bottom_border = "thin", bottom_color = wb_color("000000"),
+)
+
+wb$add_cell_style("ventas", "A1:D1", horizontal = "center", vertical = "center")
+wb$add_cell_style("ventas", "B2:D4", horizontal = "center")
+
+wb$set_col_widths("ventas", cols = 1:4, widths = c(14, 12, 10, 12))
+wb$set_row_heights("ventas", rows = 1, heights = 30)
+
+wb$merge_cells("resumen", "A1:B1")
+wb$add_cell_style("resumen", "A1", horizontal = "center", vertical = "center")
+wb$set_row_heights("resumen", rows = 1, heights = 40)
+wb$set_col_widths("resumen", cols = 1:2, widths = c(14, 14))
+
+for(hoja in c("enero", "febrero", "marzo")) {
+  wb$add_border(
+    hoja, "A1:B6",
+    top_border = "thin", top_color = wb_color("000000"),
+    left_border = "thin", left_color = wb_color("000000"),
+    right_border = "thin", right_color = wb_color("000000"),
+    bottom_border = "thin", bottom_color = wb_color("000000")
+  )
+  wb$add_cell_style(hoja, "A1:B16", horizontal = "center")
+  wb$set_col_widths(hoja, cols = 1:2, widths = c(10, 14))
+}
+
+
+wb$save("clase05.xlsx")
+
+
+# Formatos numéricos ------------------------------------------------------
+
+wb <- wb_load("clase05.xlsx")
+
+wb$add_numfmt("ventas", dims = "C2:D4", "#,##0.00 €")
+wb$add_numfmt("resumen", dims = "B3:B5", "#,##0.00 €")
+wb$add_numfmt("resumen", dims = "B10", "DD/MM/YYYY")
+
+for(hoja in c("enero", "febrero", "marzo")) {
+  wb$add_numfmt(hoja, dims = "B2:B16", "#,##0.00 €")
+}
+
+ventas <- wb_to_df(wb, "ventas")
+
+margenes <- data.frame(
+  producto = ventas$producto,
+  coste = c(0.80, 0.40, 0.50),
+  pvp = ventas$precio
+)
+
+margenes$margen_pct = round((1 - margenes$coste) / margenes$pvp, 3)
+
+wb$add_worksheet("margenes")
+wb$add_data("margenes", margenes)
+
+wb$add_numfmt("margenes", "B2:C4", "#,##0.00 €")
+wb$add_numfmt("margenes", "D2:D4", "0.0%")
+
+
+wb$save("clase06.xlsx")
+wb$save("clase06.xlsx")
+
+
+# Inserción de fórmulas ---------------------------------------------------
+
+wb <- wb_load("clase06.xlsx")
+
+wb$add_data("margenes", "beneficio", start_row = 1, start_col = 5)
+
+for (i in 2:4) {
+  wb$add_formula("margenes", x = paste0("C", i, "-B", i),
+  start_row = i, start_col = 5)
+}
+
+wb$add_data("margenes", "TOTALES", start_row = 6, start_col = 1)
+wb$add_formula("margenes", "SUM(B2:B4)", start_row = 6, start_col = 2)
+wb$add_formula("margenes", "SUM(C2:C4)", start_row = 6, start_col = 3)
+wb$add_formula("margenes", "AVERAGE(D2:D4)", start_row = 6, start_col = 4)
+wb$add_formula("margenes", "SUM(E2:E4)", start_row = 6, start_col = 5)
+
+wb$add_data("ventas", "nivel", start_row = 1, start_col = 5)
+
+for(i in 2:4) {
+  formula <- paste0('IF(B', i, '>=100, "Alto", "Bajo")')
+  wb$add_formula("ventas", formula, start_row = i, start_col = 5)
+}
+
+for(hoja in c("enero", "febrero", "marzo")) {
+  wb$add_data(hoja, "TOTAL", start_row = 17, start_col = 1)
+  wb$add_formula(hoja, "SUM(B2:B16)", start_row = 17, start_col = 2)
+}
+
+wb$add_data("resumen", "Coste total:", start_row = 12, start_col = 1)
+wb$add_formula("resumen", "SUM(margenes!B2:B4)", start_row = 12, start_col = 2)
+
+wb$add_data("resumen", "Media enero:", start_row = 13, start_col = 1)
+wb$add_formula("resumen", "AVERAGE(enero!B2:B16)", start_row = 13, start_col = 2)
+
+
+wb$save("clase07.xlsx")
+
+
+# Formato condicional -----------------------------------------------------
+
+wb <- wb_load("clase07.xlsx")
+
+wb$add_dxfs_style(name = "rojo", bg_fill = wb_color("FFC7CE"))
+wb$add_dxfs_style(name = "verde", bg_fill = wb_color("63BE7B"))
+
+wb$add_conditional_formatting(
+  sheet = "ventas",
+  dims = "B2:B4",
+  rule = "<100",
+  type = "expression",
+  style = "rojo")
+
+wb$add_conditional_formatting(
+  sheet = "ventas",
+  dims = "B2:B4",
+  rule = ">=150",
+  type = "expression",
+  style = "verde")
+
+wb$add_conditional_formatting(
+  sheet = "margenes",
+  dims = "D2:D4",
+  type = "colorScale",
+  style = c(wb_color("F8696B"), wb_color("FFEB84"), wb_color("63BE7B"))
+)
+
+wb$add_conditional_formatting(
+  sheet = "margenes",
+  dims = "E2:E4",
+  type = "dataBar",
+  style = c(wb_color("638EC6"))
+)
+
+for(hoja in c("enero", "febrero", "marzo")) {
+  wb$add_conditional_formatting(
+    sheet = hoja,
+    dims = "B2:B16",
+    type = "colorScale",
+    style = c(wb_color("F8696B"), wb_color("FFEB84"), wb_color("63BE7B"))
+  )
+}
+
+wb$save("clase08.xlsx")
+
+
+# Gráficos ----------------------------------------------------------------
+
+wb <- wb_load("clase08.xlsx")
+
+ventas <- wb_to_df(wb, "ventas")
+enero <- na.omit(wb_to_df(wb, "enero"))
+febrero <- na.omit(wb_to_df(wb, "febrero"))
+marzo <- na.omit(wb_to_df(wb, "marzo"))
+
+png("chart_cantidad.png", width = 600, height = 400)
+barplot(
+  ventas$cantidad,
+  names.arg = ventas$producto,
+  col = "#4472C4",
+  main = "Productos vendidos",
+  ylab = "Unidades",
+  border = NA
+)
+dev.off()
+
+wb$add_worksheet("grafico_barras")
+wb$add_image("grafico_barras", file = "chart_cantidad.png",
+             dims = "B2:N24",
+             width = 15, height = 10)
+
+
+ingresos_mes <- c(sum(enero$ingreso), sum(febrero$ingreso), sum(marzo$ingreso))
+
+png("chart_ingresos.png", width = 600, heigh = 400)
+plot(ingresos_mes, type = "o", col = "#4472C4",
+     main = "Evolución de ingresos en primer trimestre")
+# axis(1, at 1:3, labels = c("Enero", "Febrero", "Marzo"))
+dev.off()
+
+wb$add_worksheet("grafico_lineas")
+wb$add_image("grafico_lineas", file = "chart_ingresos.png",
+             dims = "B2:N24",
+             width = 15, height = 10)
+
+importes <- ventas$cantidad * ventas$precio
+
+png("chart_circular.png", width = 500, height = 500)
+colores <- c("#4472C4", "#ED7D31", "#A5A5A5")
+pie(importes,
+    labels = paste0(ventas$producto, "\n", round(importes, 2), " €"),
+    col = colores,
+    main = "Distribución de ingresos")
+dev.off()
+
+wb$add_worksheet("grafico_circular")
+wb$add_image("grafico_circular", file = "chart_circular.png",
+             dims = "B2:I24",
+             width = 15, height = 10)
+
+wb$save("clase09.xlsx")
+
+
+# Validaciones ------------------------------------------------------------
+
+wb <- wb_load("clase09.xlsx")
+
+wb$freeze_pane("ventas", first_row = T)
+
+wb$add_data_validation("ventas",
+                       dims = "A2:A4",
+                       type = "list",
+                       value = '"Manzanas,Plátanos,Naranjas,Fresas,Uvas"')
+
+wb$add_data_validation(
+  "ventas",
+  dims = "B2:B4",
+  type = "whole",
+  operator = "greaterThan",
+  value = 0
+)
+
+wb$add_data_validation(
+  "ventas",
+  dims = "C2:C4",
+  type = "decimal",
+  operator = "between",
+  value = c("0.01", "100")
+)
+
+wb$protect_worksheet("margenes", password = "d0ar")
+
+wb$protect_worksheet("grafico_barras")
+wb$protect_worksheet("grafico_lineas")
+wb$protect_worksheet("grafico_circular")
+
+for(hoja in c("enero", "febrero", "marzo")) {
+  wb$freeze_pane(hoja, first_row = T)
+}
+
+
+wb$save("clase10.xlsx")

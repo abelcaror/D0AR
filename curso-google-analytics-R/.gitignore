@@ -1,0 +1,24 @@
+# Credenciales y configuración privada
+.Renviron
+config.R
+*credenciales*
+*.json
+
+# Tokens de autenticación de Google
+.httr-oauth
+.secrets/
+
+# Archivos de R
+.Rhistory
+.Rdata
+.RDataTmp
+*.Rproj.user/
+
+# Datos descargados (pueden ser grandes)
+datos/
+*.rds
+*.csv
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db

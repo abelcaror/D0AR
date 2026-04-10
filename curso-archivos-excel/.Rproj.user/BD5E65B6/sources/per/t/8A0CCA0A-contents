@@ -1,0 +1,705 @@
+# ============================================================================
+# CURSO: MODIFICAR ARCHIVOS .XLSX CON R (SIN EXCEL)
+# ============================================================================
+# Librería principal: openxlsx2
+# Instalar una sola vez: install.packages("openxlsx2")
+#
+# Para visualizar los resultados, abre los .xlsx generados con LibreOffice Calc.
+#
+# IMPORTANTE: a partir de la clase 3, las clases se encadenan. Cada una carga
+# el archivo generado por la anterior y lo amplía. Ejecútalas en orden.
+# ============================================================================
+
+
+# ############################################################################
+# CLASE 1 — INTRODUCCIÓN: TU PRIMER .XLSX DESDE R
+# ############################################################################
+# ¿Por qué openxlsx2? Porque con un solo paquete (sin Java, sin Excel)
+# cubres lectura, escritura, formato, fórmulas, gráficos y validación.
+#
+# Alternativas y por qué no las usamos:
+#   - openxlsx:   antecesor de openxlsx2, desarrollo parado, API menos consistente
+#   - writexl:    solo escribe data.frames, no da formato ni lee archivos
+#   - readxl:     solo lee, no escribe nada (y depende del tidyverse)
+#   - xlsx:       depende de Java (rJava), pesadilla de configurar en macOS
+#   - XLConnect:  también depende de Java, mismo problema
+#
+# Qué vas a aprender:
+#   - Qué es openxlsx2 y por qué no necesitas Excel
+#   - Crear un workbook vacío
+#   - Añadir una hoja
+#   - Escribir datos básicos (vectores y data.frames)
+#   - Guardar el archivo
+#   - Leer un .xlsx existente
+
+library(openxlsx2)
+
+# --- Crear un workbook desde cero ---
+wb <- wb_workbook()
+
+# --- Añadir una hoja con nombre ---
+wb$add_worksheet("ventas")
+
+# --- Escribir un data.frame ---
+datos_ventas <- data.frame(
+  producto = c("Manzanas", "Plátanos", "Naranjas"),
+  cantidad = c(120, 85, 200),
+  precio   = c(1.50, 0.90, 1.20)
+)
+
+wb$add_data("ventas", datos_ventas)
+
+# --- Guardar ---
+wb$save("clase01_intro.xlsx")
+
+# --- Leer un archivo existente ---
+wb_leido <- wb_load("clase01_intro.xlsx")
+
+# --- Extraer los datos como data.frame ---
+df <- wb_to_df(wb_leido, sheet = "ventas")
+print(df)
+
+# --- También puedes leer directamente sin cargar el workbook ---
+df2 <- read_xlsx("clase01_intro.xlsx", sheet = "ventas")
+print(df2)
+
+
+# ############################################################################
+# CLASE 2 — MÚLTIPLES HOJAS Y NAVEGACIÓN
+# ############################################################################
+# Cómo gestionan las hojas otras librerías:
+#   - openxlsx:   addWorksheet(), removeWorksheet()... funciones sueltas, no métodos
+#   - XLConnect:  createSheet(), removeSheet()... similar pero necesita Java
+#   - readxl:     excel_sheets() para listar hojas, pero solo lectura
+#   - writexl:    no soporta múltiples hojas en un solo archivo (1 df = 1 xlsx)
+#
+# Qué vas a aprender:
+#   - Crear varias hojas en un mismo libro
+#   - Renombrar hojas
+#   - Eliminar hojas
+#   - Listar las hojas existentes
+#   - Copiar datos entre hojas
+
+library(openxlsx2)
+
+wb <- wb_workbook()
+
+# --- Crear varias hojas ---
+wb$add_worksheet("enero")
+wb$add_worksheet("febrero")
+wb$add_worksheet("marzo")
+wb$add_worksheet("temporal")
+
+# --- Escribir datos en cada hoja ---
+set.seed(42)  # Para que los datos simulados sean reproducibles
+for (mes in c("enero", "febrero", "marzo")) {
+  datos <- data.frame(
+    dia     = 1:5,
+    ingreso = round(runif(5, 100, 500), 2)
+  )
+  wb$add_data(mes, datos)
+}
+
+# --- Listar hojas ---
+nombres <- wb$get_sheet_names()
+print(nombres)
+
+# --- Renombrar una hoja ---
+wb$set_sheet_names(old = "temporal", new = "resumen")
+
+# --- Eliminar una hoja ---
+wb$remove_worksheet("resumen")
+
+# --- Verificar ---
+print(wb$get_sheet_names())
+
+# --- Leer datos de una hoja concreta ---
+wb$save("clase02_hojas.xlsx")
+df_feb <- read_xlsx("clase02_hojas.xlsx", sheet = "febrero")
+print(df_feb)
+
+
+# ############################################################################
+# CLASE 3 — ESCRIBIR EN CELDAS ESPECÍFICAS
+# ############################################################################
+# Cómo escriben en celdas concretas otras librerías:
+#   - openxlsx:   writeData(wb, sheet, x, startRow, startCol)... mismo concepto, distinta API
+#   - XLConnect:  writeWorksheet() con startRow/startCol, pero Java de por medio
+#   - writexl:    imposible, vuelca el data.frame entero desde A1 y punto
+#   - R base:     write.csv() no tiene concepto de "celda", solo filas y columnas planas
+#
+# Qué vas a aprender:
+#   - Escribir en posiciones concretas (fila, columna)
+#   - Escribir en rangos tipo "B5"
+#   - Añadir datos sin sobrescribir lo existente
+#   - Trabajar con start_row y start_col
+
+library(openxlsx2)
+
+# --- Cargamos el archivo de la clase 2 (con las hojas de meses) ---
+wb <- wb_load("clase02_hojas.xlsx")
+
+# --- Traemos también los datos de ventas de la clase 1 ---
+ventas <- read_xlsx("clase01_intro.xlsx", sheet = "ventas")
+
+# --- Añadimos la hoja de ventas al workbook actual ---
+wb$add_worksheet("ventas")
+wb$add_data("ventas", ventas)
+
+# --- Creamos una hoja de resumen con datos en posiciones concretas ---
+wb$add_worksheet("resumen")
+
+# --- Título en A1 ---
+wb$add_data("resumen", x = "Resumen Trimestral", start_col = 1, start_row = 1)
+
+# --- Leemos los datos de cada mes para calcular totales ---
+enero   <- wb_to_df(wb, sheet = "enero")
+febrero <- wb_to_df(wb, sheet = "febrero")
+marzo   <- wb_to_df(wb, sheet = "marzo")
+
+# --- Tabla resumen a partir de la fila 3 ---
+resumen <- data.frame(
+  mes            = c("Enero", "Febrero", "Marzo"),
+  total_ingresos = c(sum(enero$ingreso), sum(febrero$ingreso), sum(marzo$ingreso))
+)
+wb$add_data("resumen", x = resumen, start_row = 3, start_col = 1)
+
+# --- Nota al pie en una posición concreta ---
+wb$add_data("resumen", x = "Nota: cifras en euros. Datos simulados.",
+            start_row = 8, start_col = 1)
+
+# --- Dato suelto: fecha de generación ---
+wb$add_data("resumen", x = "Generado el:", start_row = 10, start_col = 1)
+wb$add_data("resumen", x = Sys.Date(), start_row = 10, start_col = 2)
+
+# --- En la hoja de ventas, añadimos una columna de importe total en D ---
+wb$add_data("ventas", x = "importe", start_row = 1, start_col = 4)
+wb$add_data("ventas", x = data.frame(ventas$cantidad * ventas$precio),
+            start_row = 2, start_col = 4, col_names = FALSE)
+
+wb$save("clase03_celdas.xlsx")
+
+
+# ############################################################################
+# CLASE 4 — FORMATO DE CELDAS: FUENTES, COLORES Y RELLENO
+# ############################################################################
+# Cómo aplican formato de celda otras librerías:
+#   - openxlsx:   createStyle() + addStyle()... creas un objeto estilo y lo aplicas aparte
+#   - XLConnect:  setCellStyle() con objetos CellStyle de Java, verboso
+#   - writexl:    sin formato, escribe datos crudos sin estilo alguno
+#   - xlsx:       CellStyle() + Font() + Fill()... todo objetos Java, pesado
+#
+# Ventaja de openxlsx2: aplicas formato directamente con $add_font(), $add_fill()
+# sin crear objetos intermedios. Más conciso.
+#
+# Qué vas a aprender:
+#   - Aplicar negrita, cursiva, subrayado
+#   - Cambiar tamaño y tipo de fuente
+#   - Color de texto y color de fondo
+#   - Aplicar formato a rangos de celdas
+
+library(openxlsx2)
+
+# --- Cargamos el archivo de la clase 3 ---
+wb <- wb_load("clase03.xlsx")
+
+# --- Formateamos la hoja "ventas" (3 productos, cols A:D) ---
+
+# Cabecera en negrita, tamaño 14, fondo azul, texto blanco
+wb$add_font("ventas", dims = "A1:D1", bold = 1, size = 14)
+wb$add_fill("ventas", dims = "A1:D1", color = wb_color("4472C4"))
+wb$add_font("ventas", dims = "A1:D1", color = wb_color("FFFFFF"))
+
+# Productos en cursiva
+wb$add_font("ventas", dims = "A2:A4", italic = 1)
+
+# Precios en fuente monoespaciada
+wb$add_font("ventas", dims = "C2:C4", name = "Courier New", size = 12)
+
+# Resaltar el producto con más cantidad (Naranjas, fila 4) en verde claro
+wb$add_fill("ventas", dims = "B4", color = wb_color("C6EFCE"))
+
+# --- Formateamos la hoja "resumen" ---
+
+# Título grande y destacado
+wb$add_font("resumen", dims = "A1", bold = 1, size = 18)
+wb$add_font("resumen", dims = "A1", color = wb_color("1F4E79"))
+
+# Cabecera de la tabla resumen (fila 3)
+wb$add_font("resumen", dims = "A3:B3", bold = 1, size = 12)
+wb$add_fill("resumen", dims = "A3:B3", color = wb_color("D6E4F0"))
+
+# Nota al pie en gris y cursiva
+wb$add_font("resumen", dims = "A8", italic = 1, color = wb_color("808080"))
+
+# --- Formateamos las hojas de meses (cabecera de cada una) ---
+for (hoja in c("enero", "febrero", "marzo")) {
+  wb$add_font(hoja, dims = "A1:B1", bold = 1)
+  wb$add_fill(hoja, dims = "A1:B1", color = wb_color("E2EFDA"))
+}
+
+wb$save("clase04.xlsx")
+
+
+# ############################################################################
+# CLASE 5 — BORDES, ALINEACIÓN Y TAMAÑO DE COLUMNAS
+# ############################################################################
+# Cómo manejan bordes y layout otras librerías:
+#   - openxlsx:   mergeCells(), setColWidths(), setRowHeights()... funciones sueltas
+#   - XLConnect:  mergeCells(), setColumnWidth()... similar pero con Java
+#   - writexl:    no soporta bordes, merge ni ajuste de dimensiones
+#   - flextable:  alternativa para tablas bonitas, pero genera Word/HTML, no xlsx nativo
+#
+# Nota: combinar celdas (merge) es algo que solo pueden hacer las librerías
+# que trabajan directamente con el formato xlsx. CSV no tiene este concepto.
+#
+# Qué vas a aprender:
+#   - Añadir bordes a celdas y rangos
+#   - Alinear texto (horizontal y vertical)
+#   - Ajustar ancho de columnas y alto de filas
+#   - Combinar celdas (merge)
+
+library(openxlsx2)
+
+# --- Cargamos el archivo de la clase 4 ---
+wb <- wb_load("clase04.xlsx")
+
+# --- Hoja "ventas": bordes en toda la tabla (cabecera + 3 filas) ---
+wb$add_border("ventas", dims = "A1:D4",
+  top_border    = "thin", bottom_border = "thin",
+  left_border   = "thin", right_border  = "thin",
+  top_color     = wb_color("000000"), bottom_color = wb_color("000000"),
+  left_color    = wb_color("000000"), right_color  = wb_color("000000")
+)
+
+# Centrar la cabecera
+wb$add_cell_style("ventas", dims = "A1:D1", horizontal = "center")
+
+# Centrar los números
+wb$add_cell_style("ventas", dims = "B2:D4", horizontal = "center")
+
+# Ancho de columnas
+wb$set_col_widths("ventas", cols = 1:4, widths = c(14, 12, 10, 12))
+
+# Alto de la cabecera
+wb$set_row_heights("ventas", rows = 1, heights = 30)
+
+# --- Hoja "resumen": merge del título y bordes ---
+
+# Combinar celdas del título
+wb$merge_cells("resumen", dims = "A1:B1")
+wb$add_cell_style("resumen", dims = "A1", horizontal = "center", vertical = "center")
+wb$set_row_heights("resumen", rows = 1, heights = 40)
+
+# Bordes en la tabla resumen (fila 3 cabecera + filas 4-6 datos)
+wb$add_border("resumen", dims = "A3:B6",
+  top_border    = "thin", bottom_border = "thin",
+  left_border   = "thin", right_border  = "thin",
+  top_color     = wb_color("000000"), bottom_color = wb_color("000000"),
+  left_color    = wb_color("000000"), right_color  = wb_color("000000")
+)
+
+# Centrar cabecera del resumen
+wb$add_cell_style("resumen", dims = "A3:B3", horizontal = "center")
+
+# Ancho de columnas del resumen
+wb$set_col_widths("resumen", cols = 1:2, widths = c(14, 18))
+
+# --- Hojas de meses: bordes y ancho ---
+for (hoja in c("enero", "febrero", "marzo")) {
+  wb$add_border(hoja, dims = "A1:B6",
+    top_border    = "thin", bottom_border = "thin",
+    left_border   = "thin", right_border  = "thin",
+    top_color     = wb_color("000000"), bottom_color = wb_color("000000"),
+    left_color    = wb_color("000000"), right_color  = wb_color("000000")
+  )
+  wb$add_cell_style(hoja, dims = "A1:B1", horizontal = "center")
+  wb$set_col_widths(hoja, cols = 1:2, widths = c(10, 14))
+}
+
+wb$save("clase05_bordes.xlsx")
+
+
+# ############################################################################
+# CLASE 6 — FORMATOS NUMÉRICOS Y DE FECHA
+# ############################################################################
+# Cómo manejan formatos numéricos otras librerías:
+#   - openxlsx:   createStyle(numFmt = "...")... el formato va dentro del estilo
+#   - XLConnect:  setDataFormat() sobre CellStyle, verboso
+#   - writexl:    no soporta formatos, escribe el número tal cual
+#   - readxl:     al leer, convierte fechas Excel a Date de R automáticamente (útil)
+#
+# Ojo con las fechas: Excel almacena fechas como números (días desde 1900-01-01).
+# openxlsx2 convierte as.Date() de R correctamente, pero si lees con readxl
+# a veces necesitas convertir con as.Date(x, origin = "1899-12-30").
+#
+# Qué vas a aprender:
+#   - Formato de moneda, porcentaje y decimales
+#   - Formato de fechas
+#   - Crear formatos personalizados
+#   - Escribir fechas correctamente desde R
+
+library(openxlsx2)
+
+# --- Cargamos el archivo de la clase 5 ---
+wb <- wb_load("clase05.xlsx")
+
+# --- Hoja "ventas": formatos numéricos ---
+
+# Precios en formato moneda
+wb$add_numfmt("ventas", dims = "C2:C4", numfmt = "#,##0.00 €")
+
+# Importe total en moneda
+wb$add_numfmt("ventas", dims = "D2:D4", numfmt = "#,##0.00 €")
+
+# --- Hoja "resumen": ingresos en moneda ---
+wb$add_numfmt("resumen", dims = "B4:B6", numfmt = "#,##0.00 €")
+
+# Fecha de generación
+wb$add_numfmt("resumen", dims = "B10", numfmt = "DD/MM/YYYY")
+
+# --- Hojas de meses: ingresos con decimales ---
+for (hoja in c("enero", "febrero", "marzo")) {
+  wb$add_numfmt(hoja, dims = "B2:B6", numfmt = "#,##0.00 €")
+}
+
+# --- Añadimos una hoja de márgenes con porcentajes ---
+# Reutilizamos los productos de la hoja "ventas"
+ventas <- wb_to_df(wb, sheet = "ventas")
+
+wb$add_worksheet("margenes")
+wb$add_data("margenes", data.frame(
+  producto   = ventas$producto,
+  coste      = c(0.80, 0.40, 0.50),
+  pvp        = ventas$precio,
+  margen_pct = round(1 - c(0.80, 0.40, 0.50) / ventas$precio, 3)
+))
+
+wb$add_numfmt("margenes", dims = "B2:C4", numfmt = "#,##0.00 €")
+wb$add_numfmt("margenes", dims = "D2:D4", numfmt = "0.0%")
+
+wb$save("clase06_numfmt.xlsx")
+
+
+# ############################################################################
+# CLASE 7 — FÓRMULAS DE EXCEL DESDE R
+# ############################################################################
+# Cómo manejan fórmulas otras librerías:
+#   - openxlsx:   writeFormula()... mismo concepto, función suelta
+#   - XLConnect:  setCellFormula()... por celda individual, tedioso
+#   - writexl:    no soporta fórmulas, solo datos planos
+#   - xlsx:       setCellFormula() sobre objetos Cell de Java
+#
+# Alternativa sin fórmulas: calcular en R y escribir el resultado.
+# Ventaja de las fórmulas: se recalculan si alguien edita el xlsx en LibreOffice.
+# Desventaja: R no evalúa las fórmulas, solo las escribe. Necesitas abrir el archivo.
+#
+# Qué vas a aprender:
+#   - Insertar fórmulas (SUM, AVERAGE, IF, etc.)
+#   - Las fórmulas se calculan al abrir en LibreOffice
+#   - Fórmulas que referencian otras hojas
+
+library(openxlsx2)
+
+# --- Cargamos el archivo de la clase 6 ---
+wb <- wb_load("clase06.xlsx")
+
+# --- Hoja "margenes": fórmulas de beneficio ---
+
+# Cabecera para la columna de beneficio
+wb$add_data("margenes", x = "beneficio", start_row = 1, start_col = 5)
+
+# Fórmula: beneficio = pvp - coste (columna C - columna B)
+for (i in 2:4) {
+  wb$add_formula("margenes", x = paste0("C", i, "-B", i),
+                 start_row = i, start_col = 5)
+}
+
+# --- Fila de totales ---
+wb$add_data("margenes", x = "TOTALES", start_row = 6, start_col = 1)
+wb$add_formula("margenes", x = "SUM(B2:B4)", start_row = 6, start_col = 2)
+wb$add_formula("margenes", x = "SUM(C2:C4)", start_row = 6, start_col = 3)
+wb$add_formula("margenes", x = "AVERAGE(D2:D4)", start_row = 6, start_col = 4)
+wb$add_formula("margenes", x = "SUM(E2:E4)", start_row = 6, start_col = 5)
+
+# --- Hoja "ventas": fórmula IF para clasificar por cantidad ---
+wb$add_data("ventas", x = "nivel", start_row = 1, start_col = 5)
+
+for (i in 2:4) {
+  formula <- paste0('IF(B', i, '>=100,"Alto","Bajo")')
+  wb$add_formula("ventas", x = formula, start_row = i, start_col = 5)
+}
+
+# --- Hojas de meses: fórmula SUM al final ---
+for (hoja in c("enero", "febrero", "marzo")) {
+  wb$add_data(hoja, x = "TOTAL", start_row = 7, start_col = 1)
+  wb$add_formula(hoja, x = "SUM(B2:B6)", start_row = 7, start_col = 2)
+}
+
+# --- Fórmula que referencia otra hoja ---
+# En "resumen", añadimos el total de costes desde "margenes"
+wb$add_data("resumen", x = "Coste total:", start_row = 12, start_col = 1)
+wb$add_formula("resumen", x = "SUM(margenes!B2:B4)", start_row = 12, start_col = 2)
+
+# Media de ingresos de enero desde resumen
+wb$add_data("resumen", x = "Media enero:", start_row = 13, start_col = 1)
+wb$add_formula("resumen", x = "AVERAGE(enero!B2:B6)", start_row = 13, start_col = 2)
+
+wb$save("clase07_formulas.xlsx")
+
+
+# ############################################################################
+# CLASE 8 — FORMATO CONDICIONAL
+# ############################################################################
+# Cómo manejan formato condicional otras librerías:
+#   - openxlsx:   conditionalFormatting()... mismos tipos pero API de openxlsx clásico
+#   - XLConnect:  no soporta formato condicional nativo
+#   - writexl:    no soporta formato de ningún tipo
+#   - xlsx:       no soporta formato condicional
+#
+# openxlsx2 es de las pocas librerías de R que soporta los tres tipos:
+# expression (reglas), colorScale (escalas de color) y dataBar (barras).
+# Si necesitas formato condicional, openxlsx o openxlsx2 son tus únicas opciones.
+#
+# Qué vas a aprender:
+#   - Reglas de formato condicional por valor
+#   - Escalas de color (color scales)
+#   - Barras de datos (data bars)
+#   - Resaltar duplicados y valores extremos
+
+library(openxlsx2)
+
+# --- Cargamos el archivo de la clase 7 ---
+wb <- wb_load("clase07.xlsx")
+
+# --- Hoja "ventas": resaltar cantidad por nivel ---
+
+# Cantidad baja (<100) en rojo
+wb$add_dxfs_style(name = "rojo", bg_fill = wb_color("FFC7CE"))
+wb$add_dxfs_style(name = "verde", bg_fill = wb_color("63BE7B"))
+wb$add_conditional_formatting(
+  "ventas",
+  dims  = "B2:B4",
+  rule  = "B2<100",
+  style = "rojo",
+  type  = "expression"
+)
+
+# Cantidad alta (>=150) en verde
+wb$add_conditional_formatting(
+  "ventas",
+  dims  = "B2:B4",
+  rule  = ">=150",
+  style = "verde",
+  type  = "expression"
+)
+
+# --- Hoja "margenes": escala de color en los porcentajes ---
+wb$add_conditional_formatting(
+  "margenes",
+  dims = "D2:D4",
+  type = "colorScale",
+  style = c(wb_color("F8696B"), wb_color("FFEB84"), wb_color("63BE7B"))
+)
+
+# --- Hoja "margenes": barras de datos en beneficio ---
+wb$add_conditional_formatting(
+  "margenes",
+  dims = "E2:E4",
+  type = "dataBar",
+  style = c(wb_color("638EC6"))
+)
+
+# --- Hojas de meses: escala de color en ingresos ---
+for (hoja in c("enero", "febrero", "marzo")) {
+  wb$add_conditional_formatting(
+    hoja,
+    dims = "B2:B6",
+    type = "colorScale",
+    style = c(wb_color("F8696B"), wb_color("FFEB84"), wb_color("63BE7B"))
+  )
+}
+
+wb$save("clase08.xlsx")
+
+
+# ############################################################################
+# CLASE 9 — GRÁFICOS INCRUSTADOS
+# ############################################################################
+# Estrategias para meter gráficos en un xlsx:
+#   - openxlsx2:  $add_image() incrusta un PNG/JPG en la hoja (lo que usamos aquí)
+#   - openxlsx:   insertImage()... mismo enfoque, imagen estática
+#   - XLConnect:  addImage()... ídem, imagen estática con Java
+#   - writexl:    no soporta imágenes
+#
+# Para generar las imágenes usamos R base (plot, barplot, pie).
+# Alternativas de gráficos en R:
+#   - R base:     plot(), barplot(), pie()... sin dependencias, lo que usamos aquí
+#   - ggplot2:    más bonito y flexible, pero añade dependencia del tidyverse
+#   - lattice:    viene con R, potente pero sintaxis menos intuitiva
+#
+# Limitación: los gráficos son imágenes estáticas, no gráficos nativos de Excel.
+# No se actualizan si cambias los datos en LibreOffice.
+#
+# Qué vas a aprender:
+#   - Crear gráficos de barras, líneas y circular
+#   - Incrustarlos en una hoja del xlsx
+#   - Personalizar título y tamaño
+#   - Usar datos de la propia hoja como fuente
+
+library(openxlsx2)
+
+# --- Cargamos el archivo de la clase 8 ---
+wb <- wb_load("clase08.xlsx")
+
+# --- Leemos los datos que ya tenemos ---
+ventas  <- wb_to_df(wb, sheet = "ventas")
+enero   <- na.omit(wb_to_df(wb, sheet = "enero"))
+febrero <- na.omit(wb_to_df(wb, sheet = "febrero"))
+marzo   <- na.omit(wb_to_df(wb, sheet = "marzo"))
+
+# --- Gráfico de barras: cantidad por producto ---
+png("chart_cantidad.png", width = 600, height = 400)
+barplot(
+  ventas$cantidad,
+  names.arg = ventas$producto,
+  col       = "#4472C4",
+  main      = "Cantidad en Stock por Producto",
+  ylab      = "Unidades",
+  border    = NA
+)
+dev.off()
+
+wb$add_worksheet("grafico_barras")
+wb$add_image("grafico_barras", file = "chart_cantidad.png",
+             start_row = 2, start_col = 2,
+             width = 15, height = 10)
+
+# --- Gráfico de líneas: evolución de ingresos por mes ---
+ingresos_mes <- c(sum(enero$ingreso), sum(febrero$ingreso), sum(marzo$ingreso))
+
+png("chart_ingresos.png", width = 600, height = 400)
+plot(ingresos_mes, type = "o", col = "#4472C4", pch = 19,
+     xlab = "", ylab = "Euros", lwd = 2,
+     main = "Evolución de Ingresos Trimestrales",
+     xaxt = "n")
+axis(1, at = 1:3, labels = c("Enero", "Febrero", "Marzo"))
+dev.off()
+
+wb$add_worksheet("grafico_lineas")
+wb$add_image("grafico_lineas", file = "chart_ingresos.png",
+             start_row = 2, start_col = 2,
+             width = 15, height = 10)
+
+# --- Gráfico circular: proporción de ventas por producto ---
+importes <- ventas$cantidad * ventas$precio
+
+png("chart_circular.png", width = 500, height = 500)
+colores <- c("#4472C4", "#ED7D31", "#A5A5A5")
+pie(importes,
+    labels = paste0(ventas$producto, "\n", round(importes, 2), " €"),
+    col    = colores,
+    main   = "Distribución de Ingresos por Producto")
+dev.off()
+
+wb$add_worksheet("grafico_circular")
+wb$add_image("grafico_circular", file = "chart_circular.png",
+             start_row = 2, start_col = 2,
+             width = 12, height = 12)
+
+# --- Limpiar archivos temporales ---
+# file.remove("chart_cantidad.png", "chart_ingresos.png", "chart_circular.png")
+
+wb$save("clase09_graficos.xlsx")
+
+
+# ############################################################################
+# CLASE 10 — PROTECCIÓN, FILTROS Y VALIDACIÓN DE DATOS
+# ############################################################################
+# Cómo manejan protección y validación otras librerías:
+#   - openxlsx:   protectWorksheet(), dataValidation(), freezePane()... todo disponible
+#   - XLConnect:  no soporta validación de datos ni protección desde R
+#   - writexl:    no soporta nada de esto
+#   - xlsx:       protección básica de hoja, pero sin validación de datos
+#
+# Sobre filtros y freeze panes:
+#   - openxlsx:   setAutoFilter(), freezePane()... equivalentes
+#   - XLConnect:  setAutoFilter() disponible, freezePane no
+#   - Ninguna librería ligera (writexl, readxl) soporta filtros
+#
+# Qué vas a aprender:
+#   - Proteger hojas (con y sin contraseña)
+#   - Añadir autofiltros
+#   - Validación de datos (listas desplegables, rangos numéricos)
+#   - Congelar paneles (freeze panes)
+
+library(openxlsx2)
+
+# --- Cargamos el archivo de la clase 9 ---
+wb <- wb_load("clase09.xlsx")
+
+# --- Hoja "ventas": filtros y freeze ---
+
+# Autofiltros en la cabecera (A:E, incluye la columna "nivel" de la clase 7)
+# wb$add_auto_filter("ventas", dims = "A1:E1")
+# wb$add_filter("enero", rows = 1, cols = 1:2)
+
+# Congelar la primera fila (cabecera siempre visible al hacer scroll)
+wb$freeze_pane("ventas", first_row = TRUE)
+
+# --- Validación: lista desplegable para producto ---
+wb$add_data_validation("ventas",
+  dims  = "A2:A4",
+  type  = "list",
+  value = '"Manzanas,Plátanos,Naranjas,Fresas,Uvas"'
+)
+
+# --- Validación: cantidad debe ser positiva ---
+wb$add_data_validation("ventas",
+  dims     = "B2:B4",
+  type     = "whole",
+  operator = "greaterThan",
+  value    = 0
+)
+
+# --- Validación: precio entre 0.01 y 100 ---
+wb$add_data_validation("ventas",
+  dims     = "C2:C4",
+  type     = "decimal",
+  operator = "between",
+  value    = c("0.01", "100")
+)
+
+# --- Proteger la hoja de márgenes (datos sensibles) ---
+wb$protect_worksheet("margenes", password = "curso2026")
+
+# --- Proteger las hojas de gráficos (que nadie las toque) ---
+wb$protect_worksheet("grafico_barras")
+wb$protect_worksheet("grafico_lineas")
+wb$protect_worksheet("grafico_circular")
+
+# --- Freeze pane en las hojas de meses ---
+for (hoja in c("enero", "febrero", "marzo")) {
+  wb$freeze_pane(hoja, first_row = TRUE)
+}
+
+# --- Freeze pane en resumen ---
+wb$freeze_pane("resumen", first_row = TRUE)
+
+wb$save("clase10_final.xlsx")
+
+
+# ============================================================================
+# FIN DEL CURSO
+# ============================================================================
+# El archivo clase10_final.xlsx contiene TODO lo que hemos ido construyendo:
+#   - Hoja "ventas" con datos, formato, fórmulas, condicional, filtros y validación
+#   - Hojas "enero/febrero/marzo" con ingresos diarios y formato condicional
+#   - Hoja "resumen" con posicionamiento, formato, bordes y fórmulas entre hojas
+#   - Hoja "margenes" con fórmulas, porcentajes, barras de datos y protección
+#   - Hojas de gráficos con visualizaciones incrustadas
+#
+# Clases 1 y 2 son independientes. A partir de la 3, cada clase construye
+# sobre la anterior:
+#   clase01 (independiente) → clase02 (independiente) → clase03 → ... → clase10_final
+# ============================================================================
